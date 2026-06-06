@@ -1,0 +1,27 @@
+## --- Visual Studio / .NET Core Build Artifacts ---
+[Db]in/
+[Oo]bj/
+*.exe
+*.dll
+*.pdb
+*.suo
+*.user
+*.sln.docstates
+
+## --- User Secrets & Local Environment Configs ---
+*.usersecrets
+appsettings.Development.json
+appsettings.Local.json
+
+## --- IDE & Tooling (JetBrains, VS Code, AntiGravity) ---
+.idea/
+.vscode/
+.vs/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln.docstates
+
+## --- Project Specific Exclusions ---
+# Ignore all generated mp4 outputs from the short creator
+wwwroot/shorts/
