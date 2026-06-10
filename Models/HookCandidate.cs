@@ -21,6 +21,9 @@ public class HookCandidate
 
     [JsonPropertyName("crop_position")]
     public string CropPosition { get; set; } = "center";
+
+    [JsonPropertyName("is_manual")]
+    public bool IsManual { get; set; } = false;
 }
 
 public class HookAnalysisResult

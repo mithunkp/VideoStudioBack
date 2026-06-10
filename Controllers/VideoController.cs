@@ -11,12 +11,36 @@ namespace backend.Controllers;
 public class VideoController : ControllerBase
 {
     private readonly IVideoProcessingOrchestrator _orchestrator;
+    private readonly IGeminiHookService _geminiService;
     private readonly ILogger<VideoController> _logger;
 
-    public VideoController(IVideoProcessingOrchestrator orchestrator, ILogger<VideoController> logger)
+    public VideoController(
+        IVideoProcessingOrchestrator orchestrator, 
+        IGeminiHookService geminiService,
+        ILogger<VideoController> logger)
     {
         _orchestrator = orchestrator;
+        _geminiService = geminiService;
         _logger = logger;
+    }
+
+    [HttpGet("limits")]
+    public async Task<IActionResult> GetLimits(CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (GeminiHookService.GeminiTier == "Unknown" || GeminiHookService.GroqRequestsRemaining == "Unknown")
+            {
+                await _geminiService.ProbeApiLimitsAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error while attempting to probe API limits.");
+        }
+
+        var limits = _geminiService.GetApiLimits();
+        return Ok(limits);
     }
 
     [HttpPost("process")]

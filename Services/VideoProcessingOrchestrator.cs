@@ -241,7 +241,7 @@ public class VideoProcessingOrchestrator : IVideoProcessingOrchestrator
             List<HookCandidate> hooks = new();
             WhisperResponse? transcription = null;
 
-            if (!options.UseAi)
+            if (!options.UseAi || options.ManualTrimEnabled)
             {
                 stage = "reading video duration";
                 var duration = await _ffmpegService.GetVideoDurationAsync(inputVideoPath, cancellationToken);
@@ -252,126 +252,166 @@ public class VideoProcessingOrchestrator : IVideoProcessingOrchestrator
                 {
                     StartTime = Math.Round(start, 2),
                     EndTime = Math.Round(end, 2),
-                    Title = string.IsNullOrWhiteSpace(options.CaptionText) ? "Selected Local Clip" : options.CaptionText,
-                    Reason = "Manually selected and rendered locally without AI analysis.",
-                    CropPosition = options.CropPosition
+                    Title = string.IsNullOrWhiteSpace(options.CaptionText) ? "Manual Custom Trim" : options.CaptionText,
+                    Reason = "Manually selected override clip rendered locally.",
+                    CropPosition = options.CropPosition,
+                    IsManual = true
                 });
             }
-            else
+
+            if (options.UseAi)
             {
-            stage = "checking audio track";
-            if (!await _ffmpegService.HasAudioStreamAsync(inputVideoPath, cancellationToken))
-            {
-                throw new InvalidOperationException(
-                    "This MP4 has no audio track, so vocal transcription and spoken captions cannot run. " +
-                    "The file appears to be video-only, often caused by downloading a DASH video stream. " +
-                    "Upload a combined video+audio MP4, or paste the original YouTube/video URL in the Video URL tab so the backend can download and mux audio when available.");
-            }
-
-            // Extract audio only when AI transcription was requested.
-            stage = "extracting vocal audio";
-            _logger.LogInformation("Extracting audio from video...");
-            await _ffmpegService.ExtractAudioAsync(inputVideoPath, tempAudioPath, cancellationToken);
-
-            // Detect if API Keys are configured, otherwise fallback to mock mode
-            var groqKey = _configuration["Groq:ApiKey"];
-            var geminiKey = _configuration["Gemini:ApiKey"];
-            bool isMockMode = string.IsNullOrWhiteSpace(groqKey) || groqKey == "YOUR_GROQ_API_KEY_HERE" ||
-                              string.IsNullOrWhiteSpace(geminiKey) || geminiKey == "YOUR_GEMINI_API_KEY_HERE";
-
-            if (isMockMode)
-            {
-                _logger.LogWarning("API keys are not configured. Running pipeline in high-fidelity mock mode.");
-
-                // Get actual video duration via FFprobe wrapper
-                stage = "reading video duration";
-                var duration = await _ffmpegService.GetVideoDurationAsync(inputVideoPath, cancellationToken);
-
-                if (duration <= 10)
+                stage = "checking audio track";
+                if (!await _ffmpegService.HasAudioStreamAsync(inputVideoPath, cancellationToken))
                 {
-                    hooks.Add(new HookCandidate
+                    throw new InvalidOperationException(
+                        "This MP4 has no audio track, so vocal transcription and spoken captions cannot run. " +
+                        "The file appears to be video-only, often caused by downloading a DASH video stream. " +
+                        "Upload a combined video+audio MP4, or paste the original YouTube/video URL in the Video URL tab so the backend can download and mux audio when available.");
+                }
+
+                // Extract audio only when AI transcription was requested.
+                stage = "extracting vocal audio";
+                _logger.LogInformation("Extracting audio from video...");
+                await _ffmpegService.ExtractAudioAsync(inputVideoPath, tempAudioPath, cancellationToken);
+
+                // Detect if API Keys are configured, otherwise fallback to mock mode
+                var groqKey = _configuration["Groq:ApiKey"];
+                var geminiKey = _configuration["Gemini:ApiKey"];
+                bool isMockMode = string.IsNullOrWhiteSpace(groqKey) || groqKey == "YOUR_GROQ_API_KEY_HERE" ||
+                                  string.IsNullOrWhiteSpace(geminiKey) || geminiKey == "YOUR_GEMINI_API_KEY_HERE";
+
+                if (isMockMode)
+                {
+                    _logger.LogWarning("API keys are not configured. Running pipeline in high-fidelity mock mode.");
+
+                    // Get actual video duration via FFprobe wrapper
+                    stage = "reading video duration";
+                    var duration = await _ffmpegService.GetVideoDurationAsync(inputVideoPath, cancellationToken);
+
+                    if (duration <= 10)
                     {
-                        StartTime = 0,
-                        EndTime = duration,
-                        Title = "Quick Clip Highlight",
-                        Reason = "Full duration clip chosen due to short source video length."
-                    });
+                        hooks.Add(new HookCandidate
+                        {
+                            StartTime = 0,
+                            EndTime = duration,
+                            Title = "Quick Clip Highlight",
+                            Reason = "Full duration clip chosen due to short source video length."
+                        });
+                    }
+                    else
+                    {
+                        hooks.Add(new HookCandidate
+                        {
+                            StartTime = 1.0,
+                            EndTime = Math.Min(duration, 12.0),
+                            Title = "Viral Intro Hook",
+                            Reason = "Captures the early high-engagement intro hook segment."
+                        });
+
+                        if (duration >= 20)
+                        {
+                            hooks.Add(new HookCandidate
+                            {
+                                StartTime = Math.Round(duration * 0.35, 2),
+                                EndTime = Math.Min(duration, Math.Round(duration * 0.35 + 15, 2)),
+                                Title = "Core Concept Detail",
+                                Reason = "Highlights the core demonstration segment in detail."
+                            });
+                        }
+
+                        if (duration >= 30)
+                        {
+                            hooks.Add(new HookCandidate
+                            {
+                                StartTime = Math.Round(duration * 0.7, 2),
+                                EndTime = Math.Min(duration, Math.Round(duration * 0.7 + 10, 2)),
+                                Title = "Action Summary Clip",
+                                Reason = "Captures the conclusion recap and call to action."
+                            });
+                        }
+                    }
                 }
                 else
                 {
-                    hooks.Add(new HookCandidate
-                    {
-                        StartTime = 1.0,
-                        EndTime = Math.Min(duration, 12.0),
-                        Title = "Viral Intro Hook",
-                        Reason = "Captures the early high-engagement intro hook segment."
-                    });
+                    // 3. Transcribe audio using Groq
+                    stage = "transcribing vocals with Groq Whisper";
+                    _logger.LogInformation("Transcribing audio using Groq Whisper...");
+                    transcription = await _groqService.TranscribeAudioAsync(tempAudioPath, cancellationToken);
 
-                    if (duration >= 20)
+                    if (transcription.Segments == null || transcription.Segments.Count == 0)
                     {
-                        hooks.Add(new HookCandidate
-                        {
-                            StartTime = Math.Round(duration * 0.35, 2),
-                            EndTime = Math.Min(duration, Math.Round(duration * 0.35 + 15, 2)),
-                            Title = "Core Concept Detail",
-                            Reason = "Highlights the core demonstration segment in detail."
-                        });
+                        throw new Exception("Transcription failed or returned no text segments.");
                     }
 
-                    if (duration >= 30)
+                    // 4. Identify hooks using Google Gemini
+                    stage = "finding viral sections with Gemini";
+                    _logger.LogInformation("Analyzing transcript hooks using Google Gemini...");
+                    var aiHooks = await _geminiService.AnalyzeHooksAsync(transcription, cancellationToken);
+
+                    if (aiHooks == null || aiHooks.Count == 0)
                     {
-                        hooks.Add(new HookCandidate
-                        {
-                            StartTime = Math.Round(duration * 0.7, 2),
-                            EndTime = Math.Min(duration, Math.Round(duration * 0.7 + 10, 2)),
-                            Title = "Action Summary Clip",
-                            Reason = "Captures the conclusion recap and call to action."
-                        });
+                        throw new Exception("Gemini analysis completed but returned zero hook candidates.");
                     }
+
+                    hooks.AddRange(aiHooks);
                 }
             }
-            else
-            {
-                // 3. Transcribe audio using Groq
-                stage = "transcribing vocals with Groq Whisper";
-                _logger.LogInformation("Transcribing audio using Groq Whisper...");
-                transcription = await _groqService.TranscribeAudioAsync(tempAudioPath, cancellationToken);
 
-                if (transcription.Segments == null || transcription.Segments.Count == 0)
-                {
-                    throw new Exception("Transcription failed or returned no text segments.");
-                }
-
-                // 4. Identify hooks using Google Gemini
-                stage = "finding viral sections with Gemini";
-                _logger.LogInformation("Analyzing transcript hooks using Google Gemini...");
-                hooks = await _geminiService.AnalyzeHooksAsync(transcription, cancellationToken);
-
-                if (hooks == null || hooks.Count == 0)
-                {
-                    throw new Exception("Gemini analysis completed but returned zero hook candidates.");
-                }
-            }
-            }
-
-            if (transcription?.Segments?.Count > 0)
+            // ── CROP POSITION ANALYSIS ──────────────────────────────────────────────
+            // Always attempt visual crop analysis when AI mode is on, regardless of
+            // whether transcription produced segments. Hooks may come from mock mode
+            // or from Gemini without transcription segments — we still want smart crop.
+            if (options.UseAi)
             {
                 stage = "analyzing visual crop focus with Gemini";
                 try
                 {
                     for (var i = 0; i < hooks.Count; i++)
                     {
+                        var hook = hooks[i];
+                        var clipDuration = hook.EndTime - hook.StartTime;
+
+                        // Sample at 30% into the clip (avoids opening cuts/transitions)
+                        // and clamp to a valid position within the clip.
+                        var sampleOffset = clipDuration * 0.30;
+                        var sampleTime   = hook.StartTime + Math.Max(0.5, sampleOffset);
+                        sampleTime       = Math.Min(sampleTime, hook.EndTime - 0.1);
+
                         var framePath = Path.Combine(_tempDir, $"crop_{runId}_hook{i}.jpg");
-                        await _ffmpegService.ExtractFrameAsync(inputVideoPath, framePath, (hooks[i].StartTime + hooks[i].EndTime) / 2, cancellationToken);
+                        await _ffmpegService.ExtractFrameAsync(inputVideoPath, framePath, sampleTime, cancellationToken);
                         cropFramePaths.Add(framePath);
+
+                        _logger.LogDebug(
+                            "Extracted crop analysis frame for hook {Index} at {SampleTime:F2}s (clip {Start:F2}s–{End:F2}s).",
+                            i, sampleTime, hook.StartTime, hook.EndTime);
                     }
+
                     await _geminiService.ApplyVisualCropAnalysisAsync(hooks, cropFramePaths, cancellationToken);
+
+                    // Restore user's manual crop focus choice for manual overrides
+                    foreach (var hook in hooks)
+                    {
+                        if (hook.IsManual)
+                        {
+                            hook.CropPosition = options.CropPosition;
+                        }
+                    }
+
+                    // Log what Gemini returned so unrecognized values are visible in logs.
+                    for (var i = 0; i < hooks.Count; i++)
+                    {
+                        _logger.LogInformation(
+                            "Gemini crop result for hook {Index} ('{Title}'): raw='{Raw}'",
+                            i, hooks[i].Title, hooks[i].CropPosition);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Visual crop analysis failed for run {RunId}; using fallback crop positions.", runId);
                 }
             }
+            // ── END CROP POSITION ANALYSIS ──────────────────────────────────────────
 
             _logger.LogInformation("Processing {Count} hook candidates. Rendering vertical cropped short videos...", hooks.Count);
 
@@ -383,10 +423,24 @@ public class VideoProcessingOrchestrator : IVideoProcessingOrchestrator
                 var outputVideoPath = Path.Combine(_outputDir, outputShortFileName);
                 string? subtitlesPath = null;
 
-                if (transcription?.Segments?.Count > 0)
+                // FIX: Prioritize AI transcription over static CaptionText if AI is enabled and successful
+                if (options.UseAi && transcription?.Segments?.Count > 0)
                 {
                     subtitlesPath = Path.Combine(_tempDir, $"captions_{runId}_hook{i}.srt");
                     WriteHookSubtitles(subtitlesPath, transcription.Segments, hook.StartTime, hook.EndTime);
+                    subtitlePaths.Add(subtitlesPath);
+                }
+                else if (hook.IsManual && !string.IsNullOrWhiteSpace(options.CaptionText))
+                {
+                    subtitlesPath = Path.Combine(_tempDir, $"captions_{runId}_hook{i}.srt");
+                    var duration = hook.EndTime - hook.StartTime;
+                    using (var writer = new StreamWriter(subtitlesPath, false, System.Text.Encoding.UTF8))
+                    {
+                        writer.WriteLine(1);
+                        writer.WriteLine($"00:00:00,000 --> {FormatSrtTime(duration)}");
+                        writer.WriteLine(options.CaptionText);
+                        writer.WriteLine();
+                    }
                     subtitlePaths.Add(subtitlesPath);
                 }
 
@@ -394,8 +448,15 @@ public class VideoProcessingOrchestrator : IVideoProcessingOrchestrator
                     i + 1, hook.Title, hook.StartTime, hook.EndTime);
 
                 stage = $"rendering hook {i + 1} of {hooks.Count}";
-                var cropPosition = NormalizeCropPosition(hook.CropPosition, options.CropPosition);
+
+                // normalize crop position with alias handling and detailed logging.
+                var cropPosition = NormalizeCropPosition(hook.CropPosition, options.CropPosition, _logger);
                 hook.CropPosition = cropPosition;
+
+                _logger.LogInformation(
+                    "Hook {Index} final crop position: '{CropPosition}' (AI raw: '{AiRaw}', fallback: '{Fallback}').",
+                    i + 1, cropPosition, hook.CropPosition, options.CropPosition);
+
                 await _ffmpegService.RenderShortAsync(inputVideoPath, outputVideoPath, hook.StartTime, hook.EndTime, options, cropPosition, subtitlesPath, cancellationToken);
 
                 // Serve path is relative to the static files mapping (from wwwroot root)
@@ -438,31 +499,107 @@ public class VideoProcessingOrchestrator : IVideoProcessingOrchestrator
         }
     }
 
-    private static string NormalizeCropPosition(string? aiCropPosition, string fallback)
+    /// <summary>
+    /// Resolves a crop position string from AI output into one of the three valid
+    /// values: "left", "center", or "right".
+    ///
+    /// Changes from the original:
+    ///   1. Normalizes common aliases Gemini may return (e.g. "centre", "middle",
+    ///      "face", "subject", "auto") before the validity check.
+    ///   2. Logs a warning with the raw AI value whenever the fallback is used,
+    ///      making silent failures visible in the log stream.
+    ///   3. Accepts an optional ILogger so the warning is attributed correctly.
+    /// </summary>
+    private static string NormalizeCropPosition(string? aiCropPosition, string fallback, ILogger? logger = null)
     {
-        var value = aiCropPosition?.ToLowerInvariant();
-        return value is "left" or "center" or "right" ? value : fallback;
+        // Trim whitespace and normalize to lowercase for comparison.
+        var value = aiCropPosition?.Trim().ToLowerInvariant();
+
+        // Map common aliases that Gemini (or other AI services) may return
+        // to one of the three accepted values.
+        value = value switch
+        {
+            // "center" aliases
+            "centre" or "middle" or "auto" or "subject" or "face" or "person" => "center",
+
+            // "left" aliases
+            "left-center" or "left center" or "far left" => "left",
+
+            // "right" aliases
+            "right-center" or "right center" or "far right" => "right",
+
+            // Pass through unchanged; validity check follows.
+            _ => value
+        };
+
+        if (value is "left" or "center" or "right")
+            return value;
+
+        // The AI returned something we don't recognise after alias resolution.
+        // Log the raw value so it's easy to add new aliases later.
+        logger?.LogWarning(
+            "Unrecognized crop position '{RawValue}' received from AI (after alias resolution: '{Resolved}'). " +
+            "Falling back to '{Fallback}'. Consider adding this alias to NormalizeCropPosition.",
+            aiCropPosition, value, fallback);
+
+        // Ensure the fallback is itself a valid value; default to "center" if not.
+        return fallback is "left" or "center" or "right" ? fallback : "center";
     }
 
-    private static void WriteHookSubtitles(string path, IEnumerable<WhisperSegment> segments, double hookStart, double hookEnd)
+   private static void WriteHookSubtitles(string path, IEnumerable<WhisperSegment> segments, double hookStart, double hookEnd)
     {
         var relevantSegments = segments
-            .Where(segment => segment.End > hookStart && segment.Start < hookEnd && !string.IsNullOrWhiteSpace(segment.Text))
+            .Where(s => s.End > hookStart && s.Start < hookEnd && !string.IsNullOrWhiteSpace(s.Text))
             .ToList();
 
-        using var writer = new StreamWriter(path, false, System.Text.Encoding.UTF8);
-        for (var i = 0; i < relevantSegments.Count; i++)
+        var cards = new List<(double Start, double End, string Text)>();
+        
+        // Reduced to 3 words max for punchier, faster reading sync
+        const int MaxWordsPerCard = 3; 
+
+        foreach (var segment in relevantSegments)
         {
-            var segment = relevantSegments[i];
-            var start = Math.Max(0, segment.Start - hookStart);
-            var end = Math.Min(hookEnd - hookStart, segment.End - hookStart);
+            var segStart = Math.Max(0, segment.Start - hookStart);
+            var segEnd   = Math.Min(hookEnd - hookStart, segment.End - hookStart);
+            var segDuration = segEnd - segStart;
+
+            var words = segment.Text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length == 0) continue;
+
+            var chunks = words
+                .Select((word, idx) => (word, idx))
+                .GroupBy(x => x.idx / MaxWordsPerCard)
+                .Select(g => string.Join(" ", g.Select(x => x.word)))
+                .ToList();
+
+            // FIX: Proportional time splitting based on text length.
+            // This massively improves sync compared to dividing time equally.
+            var totalChars = chunks.Sum(c => c.Length);
+            var currentTime = segStart;
+
+            foreach (var chunk in chunks)
+            {
+                var chunkDuration = totalChars > 0 
+                    ? segDuration * ((double)chunk.Length / totalChars)
+                    : segDuration / chunks.Count;
+
+                var cardEnd = currentTime + chunkDuration;
+                cards.Add((currentTime, Math.Max(currentTime + 0.1, cardEnd), chunk));
+                currentTime = cardEnd;
+            }
+        }
+
+        using var writer = new StreamWriter(path, false, System.Text.Encoding.UTF8);
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var (start, end, text) = cards[i];
             writer.WriteLine(i + 1);
-            writer.WriteLine($"{FormatSrtTime(start)} --> {FormatSrtTime(Math.Max(start + 0.1, end))}");
-            writer.WriteLine(segment.Text.Trim());
+            writer.WriteLine($"{FormatSrtTime(start)} --> {FormatSrtTime(end)}");
+            writer.WriteLine(text);
             writer.WriteLine();
         }
     }
-
+    
     private static string FormatSrtTime(double seconds)
     {
         var time = TimeSpan.FromSeconds(Math.Max(0, seconds));

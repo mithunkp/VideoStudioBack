@@ -3,9 +3,11 @@ namespace backend.Models;
 public class VideoRenderOptions
 {
     public bool UseAi { get; set; }
+    public bool ManualTrimEnabled { get; set; }
     public double StartTime { get; set; }
     public double EndTime { get; set; } = 30;
     public string CropPosition { get; set; } = "center";
+    public string CropMode { get; set; } = "static";
     public string CaptionText { get; set; } = string.Empty;
     public string CaptionFont { get; set; } = "Impact";
     public string CaptionColor { get; set; } = "#ffffff";
