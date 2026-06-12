@@ -60,6 +60,9 @@ public class VideoProcessingOrchestrator : IVideoProcessingOrchestrator
 
     public async Task<VideoProcessingResult> ProcessVideoAsync(Stream videoStream, string originalFileName, VideoRenderOptions options, CancellationToken cancellationToken = default)
     {
+        // Fire-and-forget background cleanup of files older than 1 hour
+        _ = Task.Run(() => DeleteOldFiles(), CancellationToken.None);
+
         var runId = Guid.NewGuid().ToString("N");
         var inputVideoPath = Path.Combine(_tempDir, $"input_{runId}.mp4");
 
@@ -92,6 +95,9 @@ public class VideoProcessingOrchestrator : IVideoProcessingOrchestrator
 
     public async Task<VideoProcessingResult> ProcessVideoUrlAsync(string videoUrl, VideoRenderOptions options, CancellationToken cancellationToken = default)
     {
+        // Fire-and-forget background cleanup of files older than 1 hour
+        _ = Task.Run(() => DeleteOldFiles(), CancellationToken.None);
+
         var runId = Guid.NewGuid().ToString("N");
         var inputVideoPath = Path.Combine(_tempDir, $"input_{runId}.mp4");
 
@@ -604,6 +610,62 @@ public class VideoProcessingOrchestrator : IVideoProcessingOrchestrator
     {
         var time = TimeSpan.FromSeconds(Math.Max(0, seconds));
         return $"{(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00},{time.Milliseconds:000}";
+    }
+
+    private void DeleteOldFiles()
+    {
+        try
+        {
+            var maxAge = TimeSpan.FromHours(1); // Keep files for 1 hour to allow user download
+            var now = DateTime.UtcNow;
+
+            // Clean output shorts directory
+            if (Directory.Exists(_outputDir))
+            {
+                var directoryInfo = new DirectoryInfo(_outputDir);
+                foreach (var file in directoryInfo.GetFiles())
+                {
+                    // Only clean up generated videos
+                    if (file.Name.StartsWith("short_") && (now - file.CreationTimeUtc) > maxAge)
+                    {
+                        try
+                        {
+                            file.Delete();
+                            _logger.LogInformation("Deleted old rendered short file: {Name}", file.Name);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete old rendered short: {Name}", file.Name);
+                        }
+                    }
+                }
+            }
+
+            // Clean temp directory (for any leftovers from crashes)
+            if (Directory.Exists(_tempDir))
+            {
+                var directoryInfo = new DirectoryInfo(_tempDir);
+                foreach (var file in directoryInfo.GetFiles())
+                {
+                    if ((now - file.CreationTimeUtc) > maxAge)
+                    {
+                        try
+                        {
+                            file.Delete();
+                            _logger.LogInformation("Deleted leftover temp file: {Name}", file.Name);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete leftover temp file: {Name}", file.Name);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred during old files cleanup.");
+        }
     }
 
     private void TryDeleteFile(string path)

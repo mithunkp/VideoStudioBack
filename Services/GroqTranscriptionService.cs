@@ -38,19 +38,22 @@ public class WhisperResponse
 public class GroqTranscriptionService : IGroqTranscriptionService
 {
     private readonly HttpClient _httpClient;
-    private readonly string _apiKey;
+    private readonly IApiKeyStore _keyStore;
     private readonly ILogger<GroqTranscriptionService> _logger;
 
-    public GroqTranscriptionService(HttpClient httpClient, IConfiguration configuration, ILogger<GroqTranscriptionService> logger)
+    // Resolved at call time so newly-saved keys take effect without a restart
+    private string ApiKey => _keyStore.GroqApiKey;
+
+    public GroqTranscriptionService(HttpClient httpClient, IApiKeyStore keyStore, ILogger<GroqTranscriptionService> logger)
     {
         _httpClient = httpClient;
-        _logger = logger;
-        _apiKey = configuration["Groq:ApiKey"] ?? string.Empty;
+        _keyStore   = keyStore;
+        _logger     = logger;
     }
 
     public async Task<WhisperResponse> TranscribeAudioAsync(string audioFilePath, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_apiKey) || _apiKey == "YOUR_GROQ_API_KEY_HERE")
+        if (string.IsNullOrWhiteSpace(ApiKey) || ApiKey == "YOUR_GROQ_API_KEY_HERE")
         {
             _logger.LogWarning("Groq API key is not configured. Returning mock/empty transcription.");
             throw new InvalidOperationException("Groq API Key is not configured in application settings.");
@@ -64,7 +67,7 @@ public class GroqTranscriptionService : IGroqTranscriptionService
         _logger.LogInformation("Sending audio transcription request to Groq for: {FilePath}", audioFilePath);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/audio/transcriptions");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
 
         var content = new MultipartFormDataContent();
         

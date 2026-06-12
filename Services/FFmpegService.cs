@@ -171,22 +171,31 @@ public class FFmpegService : IFFmpegService
 
             if (cropMod == "linear")
             {
-                // Gentle linear drift: left/right drift 25 % of max pan; center oscillates
+                // Linear pan: pans the full available range over the clip duration.
+                // left  → starts at left edge (x=0), drifts to right edge (x=iw-ow)
+                // right → starts at right edge (x=iw-ow), drifts to left edge (x=0)
+                // center → slow drift from slight-left to slight-right of center
                 cropX = pos switch
                 {
-                    "left"  => $"t/{durStr}*(iw-ow)/4",
-                    "right" => $"iw-ow-t/{durStr}*(iw-ow)/4",
-                    _       => $"(iw-ow)/2+sin(2*PI*t/{durStr})*(iw-ow)/10"
+                    "left"  => $"(t/{durStr})*(iw-ow)",
+                    "right" => $"(iw-ow)*(1-t/{durStr})",
+                    _       => $"(iw-ow)/2+(t/{durStr}-0.5)*(iw-ow)/5"
                 };
             }
             else if (cropMod == "eased")
             {
-                // Sine-eased drift — smooth start + settle
+                // Cubic ease-in-out (smoothstep): slow start, fast middle, slow end.
+                // p = 3*(t/dur)^2 - 2*(t/dur)^3  — written WITHOUT pow() to avoid commas
+                // in the expression string (FFmpeg's filter graph parser treats ',' as a
+                // filter chain separator and would split inside pow(x,n) calls).
+                // u = t/dur,  p = 3*u*u - 2*u*u*u
+                var u = $"(t/{durStr})";
+                var p = $"(3*{u}*{u}-2*{u}*{u}*{u})";
                 cropX = pos switch
                 {
-                    "left"  => $"sin(PI/2*t/{durStr})*(iw-ow)/4",
-                    "right" => $"iw-ow-sin(PI/2*t/{durStr})*(iw-ow)/4",
-                    _       => $"(iw-ow)/2+sin(2*PI*t/{durStr})*(iw-ow)/10"
+                    "left"  => $"{p}*(iw-ow)",
+                    "right" => $"(iw-ow)*(1-{p})",
+                    _       => $"(iw-ow)/2+({p}-0.5)*(iw-ow)/5"
                 };
             }
             else // static
@@ -200,7 +209,7 @@ public class FFmpegService : IFFmpegService
             }
         }
 
-        var filters = $"crop=ih*9/16:ih:{cropX}:0,scale=720:1280";
+        var filters = $"crop=ih*9/16:ih:{cropX}:0,scale=1080:1920";
 
         string? assPath = null;
         bool hasSubtitles = !string.IsNullOrWhiteSpace(subtitlesPath) && File.Exists(subtitlesPath);
@@ -226,7 +235,7 @@ public class FFmpegService : IFFmpegService
         var arguments =
             $"-y -ss {startTime:0.00} -t {duration:0.00} -i \"{inputVideoPath}\" " +
             $"-vf \"{filters}\" " +
-            $"-c:v libx264 -preset superfast -crf 23 -c:a aac -b:a 128k \"{outputVideoPath}\"";
+            $"-c:v libx264 -preset fast -crf 20 -c:a aac -b:a 192k \"{outputVideoPath}\"";
 
         await RunFFmpegProcessAsync(arguments, cancellationToken);
 
@@ -248,9 +257,13 @@ public class FFmpegService : IFFmpegService
             var scanStart    = Math.Max(0, targetTime - windowSeconds);
             var scanDuration = windowSeconds * 2;
 
+            // Use output-side seek (-ss after -i) so silencedetect timestamps are
+            // accurate absolute positions within the original file. Input-side seek
+            // resets PTS to 0 which makes timestamp offsets unreliable for detection.
             var arguments =
-                $"-v error -ss {scanStart:0.00} -t {scanDuration:0.00} -i \"{inputVideoPath}\" " +
-                $"-af \"silencedetect=noise=-35dB:duration=0.15\" -f null -";
+                $"-v info -i \"{inputVideoPath}\" " +
+                $"-ss {scanStart:0.00} -t {scanDuration:0.00} " +
+                $"-af \"silencedetect=noise=-30dB:duration=0.1\" -f null -";
 
             var si = new ProcessStartInfo
             {
@@ -268,20 +281,28 @@ public class FFmpegService : IFFmpegService
 
             var output = await errTask + await stdTask;
 
+            // With output-side seek, silencedetect timestamps are absolute file positions.
+            // We filter to only consider timestamps that fall within our scan window.
             var candidates = System.Text.RegularExpressions.Regex
                 .Matches(output, @"silence_end: ([\d.]+)")
-                .Select(m => scanStart + double.Parse(
+                .Select(m => double.Parse(
                     m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))
-                .Where(t => t >= targetTime - windowSeconds && t <= targetTime + windowSeconds)
+                .Where(t => t >= scanStart && t <= scanStart + scanDuration)
                 .ToList();
 
             if (candidates.Count == 0)
             {
-                _logger.LogDebug("No silence near {Target:F2}s — keeping original.", targetTime);
+                _logger.LogDebug("No silence near {Target:F2}s — keeping original end time.", targetTime);
                 return targetTime;
             }
 
-            var best = candidates.MinBy(t => Math.Abs(t - targetTime));
+            // Prefer the silence boundary closest to (but not exceeding) targetTime.
+            // This ensures the clip ends on a natural breath/pause rather than mid-word.
+            var before = candidates.Where(t => t <= targetTime).ToList();
+            var best   = before.Count > 0
+                ? before.MaxBy(t => t)                         // latest silence before target
+                : candidates.MinBy(t => Math.Abs(t - targetTime)); // closest overall
+
             _logger.LogInformation("Natural cut: {Original:F2}s → {Best:F2}s", targetTime, best);
             return best;
         }
@@ -306,13 +327,13 @@ public class FFmpegService : IFFmpegService
             "arial"        or "clean bold" => "Arial",
             "roboto"                       => "Roboto",
             "oswald"                       => "Oswald",
-            var v when !string.IsNullOrWhiteSpace(v) => options.CaptionFont.Trim(),
+            var v when !string.IsNullOrWhiteSpace(v) => options.CaptionFont!.Trim(),
             _                              => "Impact"
         };
 
-        const int PlayResX = 720;
-        const int PlayResY = 1280;
-        const int FontSize = 95; 
+        const int PlayResX = 1080;
+        const int PlayResY = 1920;
+        const int FontSize = 140; 
 
         // ASS specifies -1 for true, 0 for false
         var bold = fontName is "Impact" or "Arial" or "Oswald" ? -1 : 0;

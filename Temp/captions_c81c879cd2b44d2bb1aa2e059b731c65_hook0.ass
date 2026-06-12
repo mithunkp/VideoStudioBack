@@ -1,0 +1,42 @@
+﻿[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Caption,Georgia,140,&H00400080,&H00FFFFFF,&H00000000,&H00800000,0,0,-1,0,100,100,1,0,1,2,6,2,40,40,250,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.62,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}THE OTHER BIG
+Dialogue: 0,0:00:00.62,0:00:01.63,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}FEATURE, AND HONESTLY
+Dialogue: 0,0:00:01.63,0:00:02.40,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}MY FAVORITE ONE,
+Dialogue: 0,0:00:02.40,0:00:03.32,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}IS FIXED PASSWORDS,
+Dialogue: 0,0:00:03.32,0:00:03.89,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}AND IT'S NOT
+Dialogue: 0,0:00:03.89,0:00:04.71,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}WHAT YOU'D THINK.
+Dialogue: 0,0:00:04.97,0:00:05.68,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}SEE, EARLIER, IF
+Dialogue: 0,0:00:05.68,0:00:06.16,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}ONE OF YOUR
+Dialogue: 0,0:00:06.16,0:00:07.05,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}PASSWORDS GOT LEAKED
+Dialogue: 0,0:00:07.05,0:00:07.89,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}ONLINE, APPLE WOULD
+Dialogue: 0,0:00:07.89,0:00:08.51,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}WARN YOU ABOUT
+Dialogue: 0,0:00:08.51,0:00:09.17,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}IT, GOOGLE DOES
+Dialogue: 0,0:00:09.17,0:00:09.75,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}THE SAME, BUT
+Dialogue: 0,0:00:09.75,0:00:10.32,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}APPLE TOOK IT
+Dialogue: 0,0:00:10.32,0:00:10.85,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}WAY FURTHER.
+Dialogue: 0,0:00:10.95,0:00:11.40,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}SO YOU CAN
+Dialogue: 0,0:00:11.40,0:00:12.02,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}JUST TAP FIXED
+Dialogue: 0,0:00:12.02,0:00:12.77,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}PASSWORD, AND IOS
+Dialogue: 0,0:00:12.77,0:00:13.57,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}LITERALLY SIGNS IT
+Dialogue: 0,0:00:13.57,0:00:14.24,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}ON THE WEBSITE,
+Dialogue: 0,0:00:14.24,0:00:15.13,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}GENERATES A STRONGER
+Dialogue: 0,0:00:15.13,0:00:16.37,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}PASSWORD, UPDATES EVERYTHING
+Dialogue: 0,0:00:16.37,0:00:16.99,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}AUTOMATICALLY.
+Dialogue: 0,0:00:17.83,0:00:18.40,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}I MEAN, NOT
+Dialogue: 0,0:00:18.40,0:00:19.23,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}WORKING ON EVERY
+Dialogue: 0,0:00:19.23,0:00:20.06,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}WEBSITE YET, BUT
+Dialogue: 0,0:00:20.06,0:00:21.15,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}ABSOLUTELY CRAZY, DID
+Dialogue: 0,0:00:21.15,0:00:21.77,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}NOT SEE THIS
+Dialogue: 0,0:00:21.77,0:00:22.13,Caption,,0,0,0,,{\fad(80,0)\fscx120\fscy120\t(0,80,\fscx100\fscy100)}COMING.

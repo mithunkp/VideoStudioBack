@@ -37,6 +37,10 @@ builder.Services.AddCors(options =>
         });
 });
 
+// Register API Key Store (singleton — all services share the same in-memory key state)
+builder.Services.AddHttpClient(); // IHttpClientFactory used by ApiKeyStoreService
+builder.Services.AddSingleton<IApiKeyStore, ApiKeyStoreService>();
+
 // Register services for Dependecy Injection
 builder.Services.AddTransient<IFFmpegService, FFmpegService>();
 builder.Services.AddTransient<IVideoProcessingOrchestrator, VideoProcessingOrchestrator>();
@@ -61,5 +65,6 @@ app.UseStaticFiles();
 app.UseAuthorization();
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "viral-studio-backend" }));
+app.MapFallbackToFile("index.html");
 
 app.Run();
