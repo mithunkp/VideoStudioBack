@@ -25,3 +25,5 @@ appsettings.Local.json
 ## --- Project Specific Exclusions ---
 # Ignore all generated mp4 outputs from the short creator
 wwwroot/shorts/
+publish/
+
